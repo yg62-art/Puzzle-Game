@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>لعبة الألغاز الذكية - Puzzle</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 22px;
+            color: #38bdf8;
+        }
+        .stats {
+            font-size: 15px;
+            color: #94a3b8;
+        }
+        .stats span {
+            color: #f43f5e;
+            font-weight: bold;
+        }
+        /* لوحة الألغاز */
+        .puzzle-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 95px);
+            grid-template-rows: repeat(3, 95px);
+            gap: 8px;
+            background: #1e293b;
+            padding: 12px;
+            border-radius: 14px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            border: 2px solid #334155;
+        }
+        .tile {
+            background: linear-gradient(135deg, #38bdf8, #0284c7);
+            color: #fff;
+            font-size: 32px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: transform 0.1s, background 0.2s;
+        }
+        .tile:active {
+            transform: scale(0.95);
+        }
+        .tile.empty {
+            background: transparent;
+            box-shadow: none;
+            cursor: default;
+        }
+        /* زر إعادة المحاولة */
+        .restart-btn {
+            margin-top: 20px;
+            background: #10b981;
+            border: none;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 10px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+            transition: background 0.2s;
+        }
+        .restart-btn:active {
+            background: #059669;
+        }
+        /* شاشة الفوز */
+        #winMessage {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.9);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        #winMessage h2 {
+            color: #10b981;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        #winMessage p {
+            font-size: 18px;
+            color: #cbd5e1;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>لعبة ترتيب الأرقام (3x3)</h1>
+        <div class="stats">الحركات: <span id="moves">0</span></div>
+    </div>
+
+    <div class="puzzle-grid" id="grid"></div>
+
+    <button class="restart-btn" onclick="initGame()">لعبة جديدة 🔄</button>
+
+    <div id="winMessage">
+        <h2>🎉 برافو عليك! فزت!</h2>
+        <p id="finalStats"></p>
+        <button class="restart-btn" onclick="initGame()">العب تاني</button>
+    </div>
+
+    <script>
+        const gridEl = document.getElementById("grid");
+        const movesEl = document.getElementById("moves");
+        const winMessageEl = document.getElementById("winMessage");
+        const finalStatsEl = document.getElementById("finalStats");
+
+        let board = [1, 2, 3, 4, 5, 6, 7, 8, ""];
+        let moves = 0;
+        let isWon = false;
+
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type) {
+            initAudio();
+            if (!audioCtx) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === "move") {
+                    osc.type = "sine";
+                    osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(500, audioCtx.currentTime + 0.08);
+                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.08);
+                } else if (type === "win") {
+                    osc.type = "triangle";
+                    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(554, audioCtx.currentTime + 0.15);
+                    osc.frequency.setValueAtTime(659, audioCtx.currentTime + 0.3);
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.45);
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.7);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.7);
+                }
+            } catch (e) {}
+        }
+
+        // خلط الألغاز بطريقة قابلة للحل دائماً
+        function shuffle() {
+            for (let i = 0; i < 100; i++) {
+                let emptyIdx = board.indexOf("");
+                let validMoves = [];
+                let row = Math.floor(emptyIdx / 3);
+                let col = emptyIdx % 3;
+
+                if (row > 0) validMoves.push(emptyIdx - 3); // فوق
+                if (row < 2) validMoves.push(emptyIdx + 3); // تحت
+                if (col > 0) validMoves.push(emptyIdx - 1); // شمال
+                if (col < 2) validMoves.push(emptyIdx + 1); // يمين
+
+                let randomIdx = validMoves[Math.floor(Math.random() * validMoves.length)];
+                board[emptyIdx] = board[randomIdx];
+                board[randomIdx] = "";
+            }
+            if (checkWinCondition()) {
+                shuffle();
+            }
+        }
+
+        function initGame() {
+            moves = 0;
+            isWon = false;
+            movesEl.innerText = moves;
+            winMessageEl.style.display = "none";
+            shuffle();
+            render();
+        }
+
+        function render() {
+            gridEl.innerHTML = "";
+            board.forEach((val, idx) => {
+                const tile = document.createElement("div");
+                tile.classList.add("tile");
+                if (val === "") {
+                    tile.classList.add("empty");
+                } else {
+                    tile.innerText = val;
+                    tile.addEventListener("click", () => handleTileClick(idx));
+                    tile.addEventListener("touchstart", (e) => {
+                        e.preventDefault();
+                        handleTileClick(idx);
+                    });
+                }
+                gridEl.appendChild(tile);
+            });
+        }
+
+        function handleTileClick(idx) {
+            if (isWon) return;
+
+            let emptyIdx = board.indexOf("");
+            let row = Math.floor(idx / 3);
+            let emptyRow = Math.floor(emptyIdx / 3);
+            let col = idx % 3;
+            let emptyCol = emptyIdx % 3;
+
+            let isAdjacent = (Math.abs(row - emptyRow) + Math.abs(col - emptyCol) === 1);
+
+            if (isAdjacent) {
+                board[emptyIdx] = board[idx];
+                board[idx] = "";
+                moves++;
+                movesEl.innerText = moves;
+                playSound("move");
+                render();
+
+                if (checkWinCondition()) {
+                    isWon = true;
+                    playSound("win");
+                    finalStatsEl.innerText = `قدرت تحل اللغز في ${moves} حركة! 🧠`;
+                    winMessageEl.style.display = "flex";
+                }
+            }
+        }
+
+        function checkWinCondition() {
+            let winningBoard = [1, 2, 3, 4, 5, 6, 7, 8, ""];
+            return board.every((val, i) => val === winningBoard[i]);
+        }
+
+        // بدء اللعبة لأول مرة
+        initGame();
+    </script>
+</body>
+</html>
